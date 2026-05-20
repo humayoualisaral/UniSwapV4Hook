@@ -17,52 +17,91 @@ import {TreasuryFeeHook} from "../src/TreasuryFeeHook.sol";
 contract TreasuryFeeHookTest is Test, Deployers {
 
     TreasuryFeeHook hook;
-    MockERC20       memecoin;
-    MockERC20       weth;
-    PoolKey         poolKey;
 
-    address constant TREASURY =
-        0x3a22a82aE40e0a269D1B5B2BD322b8762E438ccB;
+    // Tokens
+    MockERC20 memecoin;
+    MockERC20 weth;
+    MockERC20 usdc;
+
+    PoolKey wethPool;
+    PoolKey usdcPool;
+
+    // Constants matching the Hook contract
+    address constant TREASURY = 0x3a22a82aE40e0a269D1B5B2BD322b8762E438ccB;
+    uint256 constant FEE_BPS  = 9900; // 99%
+
+    // === Setup ================================================================
 
     function setUp() public {
         deployFreshManagerAndRouters();
 
+        // Deploy mock tokens
         memecoin = new MockERC20("MEME", "MEME", 18);
         weth     = new MockERC20("WETH", "WETH", 18);
-        if (address(memecoin) > address(weth))
-            (memecoin, weth) = (weth, memecoin);
+        usdc     = new MockERC20("USDC", "USDC",  6);
+
+        // Register WETH and USDC as base currencies
+        address[] memory bases = new address[](2);
+        bases[0] = address(weth);
+        bases[1] = address(usdc);
 
         uint160 flags = uint160(
             Hooks.AFTER_SWAP_FLAG               |
             Hooks.AFTER_SWAP_RETURNS_DELTA_FLAG
         );
 
+        // Mine salt matching constructor args
         (, bytes32 salt) = HookMiner.find(
-            address(this), flags,
+            address(this),
+            flags,
             type(TreasuryFeeHook).creationCode,
-            abi.encode(address(manager))
+            abi.encode(address(manager), bases)
         );
 
-        hook = new TreasuryFeeHook{salt: salt}(IPoolManager(address(manager)));
+        hook = new TreasuryFeeHook{salt: salt}(
+            IPoolManager(address(manager)),
+            bases
+        );
 
-        poolKey = PoolKey({
-            currency0:   Currency.wrap(address(memecoin)),
-            currency1:   Currency.wrap(address(weth)),
+        // -- Build pool keys ---------------------------------------------------
+
+        // MEME / WETH pool
+        (address t0, address t1) = address(memecoin) < address(weth)
+            ? (address(memecoin), address(weth))
+            : (address(weth), address(memecoin));
+
+        wethPool = PoolKey({
+            currency0:   Currency.wrap(t0),
+            currency1:   Currency.wrap(t1),
             fee:         10_000,
             tickSpacing: 200,
             hooks:       IHooks(address(hook))
         });
 
-        manager.initialize(
-            poolKey,
-            TickMath.getSqrtPriceAtTick(0)
-        );
+        // MEME / USDC pool
+        (t0, t1) = address(memecoin) < address(usdc)
+            ? (address(memecoin), address(usdc))
+            : (address(usdc), address(memecoin));
 
+        usdcPool = PoolKey({
+            currency0:   Currency.wrap(t0),
+            currency1:   Currency.wrap(t1),
+            fee:         10_000,
+            tickSpacing: 200,
+            hooks:       IHooks(address(hook))
+        });
 
-        memecoin.mint(address(this), 1_000e18);
-        weth.mint(address(this),     1_000e18);
+        // Initialize both pools at tick 0
+        manager.initialize(wethPool, TickMath.getSqrtPriceAtTick(0));
+        manager.initialize(usdcPool, TickMath.getSqrtPriceAtTick(0));
 
-        address[9] memory toApprove = [
+        // Mint tokens
+        memecoin.mint(address(this), 1_000_000e18);
+        weth.mint(address(this),     1_000_000e18);
+        usdc.mint(address(this),     1_000_000e18);
+
+        // Approve all routers
+        address[9] memory routers = [
             address(swapRouter),
             address(swapRouterNoChecks),
             address(modifyLiquidityRouter),
@@ -73,85 +112,107 @@ contract TreasuryFeeHookTest is Test, Deployers {
             address(nestedActionRouter.executor()),
             address(actionsRouter)
         ];
-
-        for (uint256 i = 0; i < toApprove.length; i++) {
-            memecoin.approve(toApprove[i], type(uint256).max);
-            weth.approve(toApprove[i], type(uint256).max);
+        for (uint256 i; i < routers.length; ++i) {
+            memecoin.approve(routers[i], type(uint256).max);
+            weth.approve(routers[i],     type(uint256).max);
+            usdc.approve(routers[i],     type(uint256).max);
         }
 
-        modifyLiquidityRouter.modifyLiquidity(
-            poolKey,
-            ModifyLiquidityParams({
-                tickLower:      -1000,
-                tickUpper:       1000,
-                liquidityDelta:  1e18,
-                salt:            0
-            }),
-            ""
-        );
+        // Add liquidity
+        ModifyLiquidityParams memory lp = ModifyLiquidityParams({
+            tickLower:      -1000,
+            tickUpper:       1000,
+            liquidityDelta:  1000e18,
+            salt:            0
+        });
+        modifyLiquidityRouter.modifyLiquidity(wethPool, lp, "");
+        modifyLiquidityRouter.modifyLiquidity(usdcPool, lp, "");
     }
 
+    // === Helpers ==============================================================
 
-    function test_SellFeeGoesToTreasury() public {
-        uint256 before     = weth.balanceOf(TREASURY);
-        bool    zeroForOne = address(memecoin) == Currency.unwrap(poolKey.currency0);
-
-        swap(poolKey, zeroForOne, -int256(1e18), "");
-
-        uint256 received = weth.balanceOf(TREASURY) - before;
-        assertGt(received, 0, "treasury got nothing on sell");
-        console.log("treasury received (sell):", received);
+    function _isToken0(PoolKey memory key, address token) internal pure returns (bool) {
+        return Currency.unwrap(key.currency0) == token;
     }
 
-    // ─── Buy: WETH → memecoin ─────────────────────────────────────────────────
-    // Hook now taxes ALL swaps — buys also send fee to treasury
+    // === Sell tests (99% fee expected) ========================================
 
-    function test_BuyFeeGoesToTreasury() public {
-        uint256 before     = memecoin.balanceOf(TREASURY);
-        bool    zeroForOne = address(weth) == Currency.unwrap(poolKey.currency0);
+    function test_Sell_MemeForWeth_FeeCharged() public {
+        uint256 before = weth.balanceOf(TREASURY);
 
-        weth.mint(address(this), 100e18);
-        weth.approve(address(swapRouter), type(uint256).max);
+        bool zeroForOne = _isToken0(wethPool, address(memecoin));
+        swap(wethPool, zeroForOne, -int256(1e18), "");
 
-        swap(poolKey, zeroForOne, -int256(1e18), "");
-
-        uint256 received = memecoin.balanceOf(TREASURY) - before;
-        assertGt(received, 0, "treasury got nothing on buy");
-        console.log("treasury received (buy):", received);
+        uint256 feeReceived = weth.balanceOf(TREASURY) - before;
+        assertGt(feeReceived, 0, "No fee on MEME->WETH sell");
+        console.log("[WETH pool] MEME->WETH fee to treasury:", feeReceived);
     }
 
-    // ─── Fee split is ~99% ────────────────────────────────────────────────────
+    function test_Sell_MemeForUsdc_FeeCharged() public {
+        uint256 before = usdc.balanceOf(TREASURY);
 
-    function test_FeeIs99Percent() public {
+        bool zeroForOne = _isToken0(usdcPool, address(memecoin));
+        swap(usdcPool, zeroForOne, -int256(1e18), "");
+
+        uint256 feeReceived = usdc.balanceOf(TREASURY) - before;
+        assertGt(feeReceived, 0, "No fee on MEME->USDC sell");
+        console.log("[USDC pool] MEME->USDC fee to treasury:", feeReceived);
+    }
+
+    // === Buy tests (zero fee expected) =======================================
+
+    function test_Buy_WethForMeme_NoFee() public {
+        uint256 treasuryBefore = memecoin.balanceOf(TREASURY);
+
+        bool zeroForOne = _isToken0(wethPool, address(weth));
+        swap(wethPool, zeroForOne, -int256(1e18), "");
+
+        uint256 feeReceived = memecoin.balanceOf(TREASURY) - treasuryBefore;
+        assertEq(feeReceived, 0, "Fee charged on buy (WETH->MEME) - must be 0");
+    }
+
+    function test_Buy_UsdcForMeme_NoFee() public {
+        uint256 treasuryBefore = memecoin.balanceOf(TREASURY);
+
+        bool zeroForOne = _isToken0(usdcPool, address(usdc));
+        swap(usdcPool, zeroForOne, -int256(1e18), "");
+
+        uint256 feeReceived = memecoin.balanceOf(TREASURY) - treasuryBefore;
+        assertEq(feeReceived, 0, "Fee charged on buy (USDC->MEME) - must be 0");
+    }
+
+    // === Fee math accuracy ====================================================
+
+    function test_FeePercentage_IsCorrect() public {
         uint256 userBefore     = weth.balanceOf(address(this));
         uint256 treasuryBefore = weth.balanceOf(TREASURY);
-        bool    zeroForOne     = address(memecoin) == Currency.unwrap(poolKey.currency0);
 
-        swap(poolKey, zeroForOne, -int256(1e18), "");
+        bool zeroForOne = _isToken0(wethPool, address(memecoin));
+        swap(wethPool, zeroForOne, -int256(1e18), "");
 
         uint256 userReceived     = weth.balanceOf(address(this)) - userBefore;
         uint256 treasuryReceived = weth.balanceOf(TREASURY)      - treasuryBefore;
         uint256 totalOutput      = userReceived + treasuryReceived;
 
+        // treasury should get exactly 9900/10000 (99%) of total output
         assertApproxEqRel(
             treasuryReceived,
-            totalOutput * 9_900 / 10_000,
+            totalOutput * FEE_BPS / 10_000,
             0.01e18,
-            "treasury fee should be ~99%"
+            "Fee % mismatch"
         );
 
         console.log("user received:     ", userReceived);
         console.log("treasury received: ", treasuryReceived);
-        console.log("total output:      ", totalOutput);
     }
 
-    // ─── Constants ────────────────────────────────────────────────────────────
+    // === Sanity: initial state ================================================
 
-    function test_TreasuryAddress() public view {
+    function test_InitialState() public view {
         assertEq(hook.TREASURY(), TREASURY);
-    }
-
-    function test_FeeBps() public view {
-        assertEq(hook.FEE_BPS(), 9_900);
+        assertEq(hook.FEE_BPS(),  FEE_BPS);
+        assertTrue(hook.isBaseCurrency(address(weth)));
+        assertTrue(hook.isBaseCurrency(address(usdc)));
+        assertFalse(hook.isBaseCurrency(address(memecoin)));
     }
 }
