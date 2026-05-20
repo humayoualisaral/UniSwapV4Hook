@@ -59,12 +59,10 @@ contract TreasuryFeeHook is BaseHook {
         bytes calldata
     ) internal override returns (bytes4, int128) {
 
-        // Output is always the currency the user receives
         int128 outputDelta = params.zeroForOne
             ? delta.amount1()
             : delta.amount0();
 
-        // Must be positive (tokens leaving pool to user)
         if (outputDelta <= 0)
             return (BaseHook.afterSwap.selector, 0);
 
@@ -77,7 +75,6 @@ contract TreasuryFeeHook is BaseHook {
             ? key.currency1
             : key.currency0;
 
-        // Pull fee from pool and send directly to treasury
         poolManager.take(outputCurrency, TREASURY, feeAmount);
 
         emit FeeSentToTreasury(
@@ -86,7 +83,6 @@ contract TreasuryFeeHook is BaseHook {
             feeAmount
         );
 
-        // Positive return = reduce user's output by feeAmount
         return (BaseHook.afterSwap.selector, int128(uint128(feeAmount)));
     }
 }

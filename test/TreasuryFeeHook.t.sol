@@ -32,7 +32,6 @@ contract TreasuryFeeHookTest is Test, Deployers {
         if (address(memecoin) > address(weth))
             (memecoin, weth) = (weth, memecoin);
 
-        // afterInitialize removed — only AFTER_SWAP flags needed
         uint160 flags = uint160(
             Hooks.AFTER_SWAP_FLAG               |
             Hooks.AFTER_SWAP_RETURNS_DELTA_FLAG
@@ -59,7 +58,6 @@ contract TreasuryFeeHookTest is Test, Deployers {
             TickMath.getSqrtPriceAtTick(0)
         );
 
-        // No registerPool needed — hook taxes all swaps automatically
 
         memecoin.mint(address(this), 1_000e18);
         weth.mint(address(this),     1_000e18);
@@ -93,7 +91,6 @@ contract TreasuryFeeHookTest is Test, Deployers {
         );
     }
 
-    // ─── Sell: memecoin → WETH ────────────────────────────────────────────────
 
     function test_SellFeeGoesToTreasury() public {
         uint256 before     = weth.balanceOf(TREASURY);
