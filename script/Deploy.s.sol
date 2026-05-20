@@ -1,46 +1,48 @@
-#!/usr/bin/env bash
-set -euo pipefail
+// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.26;
 
-ROOT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
-cd "$ROOT_DIR"
+import "forge-std/Script.sol";
+import {IPoolManager}    from "v4-core/src/interfaces/IPoolManager.sol";
+import {Hooks}           from "v4-core/src/libraries/Hooks.sol";
+import {HookMiner}       from "v4-hooks-public/src/utils/HookMiner.sol";
+import {TreasuryFeeHook} from "../src/TreasuryFeeHook.sol";
 
-# Load .env
-if [ -f .env ]; then
-  export $(grep -v '^#' .env | xargs)
-else
-  echo "❌ .env file not found"
-  exit 1
-fi
+contract Deploy is Script {
 
-: "${RPC_URL:?RPC_URL is required}"
-: "${PRIVATE_KEY:?PRIVATE_KEY is required}"
+    address constant MAINNET_PM =
+        0x000000000004444c5dc75cB358380D2e3dE08A90;
 
-# Sanitize private key
-PK=$(printf '%s' "$PRIVATE_KEY" | tr -d '\r\n' | sed 's/^0x//i')
-if ! [[ $PK =~ ^[0-9a-fA-F]{64}$ ]]; then
-  echo "❌ Invalid PRIVATE_KEY format"
-  exit 1
-fi
-export PRIVATE_KEY="0x$PK"
+    address constant SEPOLIA_PM =
+        0xE03A1074c86CFeDd5C142C4F04F1a1536e203543;
 
-echo "================================================="
-echo "🚀 Deploying TreasuryFeeHook"
-echo "RPC: $RPC_URL"
-echo "================================================="
+    address constant CREATE2_FACTORY =
+        0x4e59b44847b379578588920cA78FbF26c0B4956C;
 
-echo "🔍 Checking RPC..."
-cast chain-id --rpc-url "$RPC_URL" > /dev/null 2>&1 && echo "✅ RPC OK" || { echo "❌ RPC failed"; exit 1; }
+    function run() external {
+        address pm = block.chainid == 1 ? MAINNET_PM : SEPOLIA_PM;
 
-echo "🏗  Building..."
-forge build
+        uint160 flags = uint160(
+            Hooks.AFTER_SWAP_FLAG               |
+            Hooks.AFTER_SWAP_RETURNS_DELTA_FLAG
+        );
 
-echo "🚀 Deploying..."
-forge script script/Deploy.s.sol:Deploy \
-  --rpc-url "$RPC_URL" \
-  --private-key "$PRIVATE_KEY" \
-  --broadcast \
-  -vvvv
+        (address hookAddr, bytes32 salt) = HookMiner.find(
+            CREATE2_FACTORY,
+            flags,
+            type(TreasuryFeeHook).creationCode,
+            abi.encode(pm)
+        );
 
-echo "================================================="
-echo "🎉 Done — copy the Hook address printed above"
-echo "================================================="
+        console.log("Chain ID:    ", block.chainid);
+        console.log("PoolManager: ", pm);
+        console.log("Hook address:", hookAddr);
+
+        vm.startBroadcast();
+        TreasuryFeeHook hook = new TreasuryFeeHook{salt: salt}(
+            IPoolManager(pm)
+        );
+        require(address(hook) == hookAddr, "Address mismatch");
+        console.log("Deployed:    ", address(hook));
+        vm.stopBroadcast();
+    }
+}
