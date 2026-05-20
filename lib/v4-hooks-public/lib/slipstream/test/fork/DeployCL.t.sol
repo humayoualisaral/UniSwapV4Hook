@@ -1,0 +1,182 @@
+pragma solidity ^0.7.6;
+pragma abicoder v2;
+
+import "forge-std/Test.sol";
+import "forge-std/StdJson.sol";
+
+import {DeployCL} from "script/DeployCL.s.sol";
+import {CLPool} from "contracts/core/CLPool.sol";
+import {CLFactory} from "contracts/core/CLFactory.sol";
+import {Redistributor} from "contracts/gauge/Redistributor.sol";
+import {NonfungibleTokenPositionDescriptor} from "contracts/periphery/NonfungibleTokenPositionDescriptor.sol";
+import {NonfungiblePositionManager} from "contracts/periphery/NonfungiblePositionManager.sol";
+import {CLGauge} from "contracts/gauge/CLGauge.sol";
+import {CLGaugeFactory} from "contracts/gauge/CLGaugeFactory.sol";
+import {DynamicSwapFeeModule} from "contracts/core/fees/DynamicSwapFeeModule.sol";
+import {CustomUnstakedFeeModule} from "contracts/core/fees/CustomUnstakedFeeModule.sol";
+import {MixedRouteQuoterV2} from "contracts/periphery/lens/MixedRouteQuoterV2.sol";
+
+import {IVoter} from "contracts/core/interfaces/IVoter.sol";
+import {IMinter} from "contracts/core/interfaces/IMinter.sol";
+
+contract DeployCLForkTest is Test {
+    using stdJson for string;
+
+    DeployCL public deployCL;
+
+    string public constantsFilename = vm.envString("CONSTANTS_FILENAME");
+    uint256 public deployPrivateKey = vm.envUint("PRIVATE_KEY_DEPLOY");
+    address public deployerAddress = vm.rememberKey(deployPrivateKey);
+    string public jsonConstants;
+
+    // loaded variables
+    address public team;
+    address public weth;
+    address public voter;
+    address public minter;
+    address public escrow;
+    address public rewardToken;
+    address public factoryRegistry;
+    address public poolFactoryOwner;
+    address public legacyCLFactory;
+    address public legacyCLGaugeFactory;
+    address public legacyCLGaugeFactory2;
+    address public upkeepManager;
+    address public feeManager;
+    address public notifyAdmin;
+    address public emissionAdmin;
+    address public redistributorOwner;
+    address public factoryV2;
+    string public nftName;
+    string public nftSymbol;
+
+    // deployed contracts
+    CLPool public poolImplementation;
+    CLFactory public poolFactory;
+    NonfungibleTokenPositionDescriptor public nftDescriptor;
+    NonfungiblePositionManager public nft;
+    CLGauge public gaugeImplementation;
+    CLGaugeFactory public gaugeFactory;
+    Redistributor public redistributor;
+    DynamicSwapFeeModule public swapFeeModule;
+    CustomUnstakedFeeModule public unstakedFeeModule;
+    MixedRouteQuoterV2 public mixedQuoterV2;
+
+    function setUp() public {
+        vm.createSelectFork({urlOrAlias: "base", blockNumber: 12670000});
+        deployCL = new DeployCL();
+
+        string memory root = vm.projectRoot();
+        string memory path = concat(root, "/script/constants/");
+        path = concat(path, constantsFilename);
+        jsonConstants = vm.readFile(path);
+
+        team = abi.decode(vm.parseJson(jsonConstants, ".team"), (address));
+        weth = abi.decode(vm.parseJson(jsonConstants, ".WETH"), (address));
+        voter = abi.decode(vm.parseJson(jsonConstants, ".Voter"), (address));
+        factoryRegistry = abi.decode(vm.parseJson(jsonConstants, ".FactoryRegistry"), (address));
+        factoryV2 = abi.decode(vm.parseJson(jsonConstants, ".factoryV2"), (address));
+        poolFactoryOwner = abi.decode(vm.parseJson(jsonConstants, ".poolFactoryOwner"), (address));
+        legacyCLFactory = abi.decode(vm.parseJson(jsonConstants, ".legacyCLFactory"), (address));
+        legacyCLGaugeFactory = abi.decode(vm.parseJson(jsonConstants, ".legacyCLGaugeFactory"), (address));
+        legacyCLGaugeFactory2 = abi.decode(vm.parseJson(jsonConstants, ".legacyCLGaugeFactory2"), (address));
+        upkeepManager = abi.decode(vm.parseJson(jsonConstants, ".upkeepManager"), (address));
+        feeManager = abi.decode(vm.parseJson(jsonConstants, ".feeManager"), (address));
+        notifyAdmin = abi.decode(vm.parseJson(jsonConstants, ".notifyAdmin"), (address));
+        emissionAdmin = abi.decode(vm.parseJson(jsonConstants, ".emissionAdmin"), (address));
+        redistributorOwner = abi.decode(vm.parseJson(jsonConstants, ".redistributorOwner"), (address));
+        nftName = abi.decode(vm.parseJson(jsonConstants, ".nftName"), (string));
+        nftSymbol = abi.decode(vm.parseJson(jsonConstants, ".nftSymbol"), (string));
+
+        minter = IVoter(voter).minter();
+        escrow = address(IVoter(voter).ve());
+        rewardToken = IMinter(minter).aero();
+
+        deal(address(deployerAddress), 10 ether);
+    }
+
+    function test_deployCL() public {
+        deployCL.run();
+
+        // preload variables for convenience
+        poolImplementation = deployCL.poolImplementation();
+        poolFactory = deployCL.poolFactory();
+        nftDescriptor = deployCL.nftDescriptor();
+        nft = deployCL.nft();
+        gaugeImplementation = deployCL.gaugeImplementation();
+        gaugeFactory = deployCL.gaugeFactory();
+        redistributor = deployCL.redistributor();
+        swapFeeModule = deployCL.swapFeeModule();
+        unstakedFeeModule = deployCL.unstakedFeeModule();
+        mixedQuoterV2 = deployCL.mixedQuoterV2();
+
+        assertTrue(address(poolImplementation) != address(0));
+        assertTrue(address(poolFactory) != address(0));
+        assertEq(address(poolFactory.voter()), voter);
+        assertEq(address(poolFactory.poolImplementation()), address(poolImplementation));
+        assertEq(address(poolFactory.factoryRegistry()), address(factoryRegistry));
+        assertEq(address(poolFactory.legacyCLFactory()), legacyCLFactory);
+        assertEq(address(poolFactory.owner()), poolFactoryOwner);
+        assertEq(address(poolFactory.swapFeeModule()), address(swapFeeModule));
+        assertEq(address(poolFactory.swapFeeManager()), feeManager);
+        assertEq(address(poolFactory.unstakedFeeModule()), address(unstakedFeeModule));
+        assertEq(address(poolFactory.unstakedFeeManager()), feeManager);
+        assertEqUint(poolFactory.defaultUnstakedFee(), 100_000);
+        assertEqUint(poolFactory.tickSpacingToFee(1), 100);
+        assertEqUint(poolFactory.tickSpacingToFee(50), 500);
+        assertEqUint(poolFactory.tickSpacingToFee(100), 500);
+        assertEqUint(poolFactory.tickSpacingToFee(200), 3_000);
+        assertEqUint(poolFactory.tickSpacingToFee(2_000), 10_000);
+
+        assertTrue(address(nftDescriptor) != address(0));
+        assertEq(nftDescriptor.WETH9(), weth);
+        assertEq(nftDescriptor.nativeCurrencyLabelBytes(), bytes32("ETH"));
+
+        assertTrue(address(nft) != address(0));
+        assertEq(nft.factory(), address(poolFactory));
+        assertEq(nft.WETH9(), weth);
+        assertEq(nft.owner(), team);
+        assertEq(nft.name(), nftName);
+        assertEq(nft.symbol(), nftSymbol);
+
+        assertTrue(address(gaugeImplementation) != address(0));
+        assertTrue(address(gaugeFactory) != address(0));
+        assertEq(gaugeFactory.voter(), voter);
+        assertEq(gaugeFactory.minter(), minter);
+        assertEq(gaugeFactory.rewardToken(), rewardToken);
+        assertEq(gaugeFactory.implementation(), address(gaugeImplementation));
+        assertEq(address(gaugeFactory.legacyCLGaugeFactory()), legacyCLGaugeFactory);
+        assertEq(gaugeFactory.nft(), address(nft));
+        assertEq(gaugeFactory.notifyAdmin(), notifyAdmin);
+        assertEq(gaugeFactory.emissionAdmin(), emissionAdmin);
+
+        assertEq(redistributor.owner(), redistributorOwner);
+        assertEq(address(redistributor.voter()), voter);
+        assertEq(redistributor.minter(), minter);
+        assertEq(redistributor.escrow(), escrow);
+        assertEq(redistributor.gaugeFactory(), address(gaugeFactory));
+        assertEq(redistributor.legacyGaugeFactory(), legacyCLGaugeFactory2);
+        assertEq(redistributor.rewardToken(), rewardToken);
+        assertEq(redistributor.upkeepManager(), upkeepManager);
+
+        assertTrue(address(swapFeeModule) != address(0));
+        assertEq(swapFeeModule.MAX_BASE_FEE(), 30_000); // 3%, using pip denomination
+        assertEq(swapFeeModule.defaultFeeCap(), 30_000); // 3%
+        assertEq(swapFeeModule.defaultScalingFactor(), 0);
+        assertEq(address(swapFeeModule.factory()), address(poolFactory));
+
+        assertTrue(address(unstakedFeeModule) != address(0));
+        assertEq(unstakedFeeModule.MAX_FEE(), 500_000); // 50%, using pip denomination
+        assertEq(address(unstakedFeeModule.factory()), address(poolFactory));
+
+        // Check MixedRouteQuoterV2
+        assertTrue(address(mixedQuoterV2) != address(0));
+        assertEq(address(mixedQuoterV2.factory()), address(poolFactory));
+        assertEq(address(mixedQuoterV2.factoryV2()), factoryV2);
+        assertEq(mixedQuoterV2.WETH9(), weth);
+    }
+
+    function concat(string memory a, string memory b) internal pure returns (string memory) {
+        return string(abi.encodePacked(a, b));
+    }
+}

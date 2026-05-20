@@ -1,0 +1,237 @@
+[
+  {
+    "info": "CL200-WETH/LITKEY 0.95%",
+    "address": "0xCd1F9777571493AEAcb7eaE45cD30a226d3e612d",
+    "customFee": 9500
+  },
+  {
+    "info": "CL2000-LEVR/WETH 2%",
+    "address": "0x6243a8459ac08290883653D943878d15d89E4A1E",
+    "customFee": 20000
+  },
+  {
+    "info": "CL100-WETH/PING 0.45%",
+    "address": "0x5D28f920C9d23100E4A38b2bA2D8aE617c3b2615",
+    "customFee": 4500
+  },
+  {
+    "info": "CL200-WETH/propaganda 1.5%",
+    "address": "0x5AAfA0C3665E0D84D5fef589b4Ec5884190a1f27",
+    "customFee": 15000
+  },
+  {
+    "info": "CL200-USDC/propaganda 1.5%",
+    "address": "0xE991Ce9Db40F98f3cF552CcEC5199642F1dAb2d2",
+    "customFee": 15000
+  },
+  {
+    "info": "CL200-WETH/LSK 0.27%",
+    "address": "0x275BE3a43B66516e532BcaA36eE453EDd47614ea",
+    "customFee": 2700
+  },
+  {
+    "info": "CL200-USDC/CHECK 2%",
+    "address": "0x6A9961292F279C9565506D635c7Bd5083082B7f0",
+    "customFee": 20000
+  },
+  {
+    "info": "CL100-USDC/CHECK 0.01%",
+    "address": "0x223119f4af7A9848d0375691F9a2A4A8268dA46a",
+    "customFee": 100
+  },
+  {
+    "info": "CL500-USDC/CHECK 0.25%",
+    "address": "0x5a7B4970B2610aEe4776A6944d9F2171EE6060B0",
+    "customFee": 2500
+  },
+  {
+    "info": "CL500-USDC/MWXT 3%",
+    "address": "0xaE0e7F27f1ba0CeEEECAbe23F7B1BAc36DcDe034",
+    "customFee": 30000
+  },
+  {
+    "info": "CL50-USDC/LMTS 0.3%",
+    "address": "0x075e88017e745945B4E116118C2057441Af65C05",
+    "customFee": 3000
+  },
+  {
+    "info": "CL100-USDC/TOWER 0.25%",
+    "address": "0xD4dC229A997a73E86c13e3ce8019be02cD4827a6",
+    "customFee": 2500
+  },
+  {
+    "info": "CL50-WETH/USDC 0.065%",
+    "address": "0xc758d81B9b81A6FCDAd075bD471874A2c46B54e0",
+    "customFee": 650
+  },
+  {
+    "info": "CL1-syrupUSDC/USDC 0.035%",
+    "address": "0x5d0Ee6273f9ad78E80418C2dd203269b2aafCF8B",
+    "customFee": 350
+  },
+  {
+    "info": "CL100-WETH/jesse 0.25%",
+    "address": "0x4e40ff3Be6bdA5b131c91520Fa73515076eEE098",
+    "customFee": 2500
+  },
+  {
+    "info": "CL50-sUSDai/USDC 0.015%",
+    "address": "0xEd7b8e8D89Bb5061E5B8eC1fC8E31cdb36B7CAFE",
+    "customFee": 150
+  },
+  {
+    "info": "CL50-USDai/USDC 0.015%",
+    "address": "0x2595b1BD2944D213360e73c928c5d1636cCC2d99",
+    "customFee": 150
+  },
+  {
+    "info": "CL100-WETH/REI 1%",
+    "address": "0x34E3334E845d101205394e0Bd8821fDdc7Cd5559",
+    "customFee": 10000
+  },
+  {
+    "info": "CL200-WETH/REPPO 0.95%",
+    "address": "0x71FE33676773DF7Cf9Ce14f640caE06823F083cC",
+    "customFee": 9500
+  },
+  {
+    "info": "CL10-SOL/USDC 0.035%",
+    "address": "0xb30540172F1B37d1eE1d109e49F883E935E69219",
+    "customFee": 350
+  },
+  {
+    "info": "CL1-USDC/JLP 0.015%",
+    "address": "0x92892BFD1615e68F65EEF089Df0A11d8a1322504",
+    "customFee": 150
+  },
+  {
+    "info": "CL10-RAY/USDC 0.08%",
+    "address": "0x9063aaA59851b14B62f3958d38e56f0e13B83014",
+    "customFee": 800
+  },
+  {
+    "info": "CL10-SOL/WETH 0.045%",
+    "address": "0xd5bC662974Ec2Aa638F99F5D058c85f3d67A8747",
+    "customFee": 450
+  },
+  {
+    "info": "CL10-SOL/cbBTC 0.035%",
+    "address": "0xa25773F75d7190E130D501509D22592151dB3915",
+    "customFee": 350
+  },
+  {
+    "info": "CL10-USDC/MET 0.07%",
+    "address": "0x9C7B5145825D830C8Baa613AB6ec64E89fE90775",
+    "customFee": 700
+  },
+  {
+    "info": "CL10-AVICI/USDC 0.2%",
+    "address": "0xa558200aD07Af2dCCdE4E96A4E903cC32c5CEfB6",
+    "customFee": 2000
+  },
+  {
+    "info": "CL10-Fartcoin/USDC 0.14%",
+    "address": "0xAADc0ef838bF056e02710958C48C08187E4F5D8b",
+    "customFee": 1400
+  },
+  {
+    "info": "CL10-pippin/USDC 0.25%",
+    "address": "0xB6B2F0672fC74DBF45f95bA00698Fac446DDD4Bb",
+    "customFee": 2500
+  },
+  {
+    "info": "CL200-HYPR/USDC 0.01%",
+    "address": "0xDC98f2741c143B53834fD0E443f3Fdc461d6C821",
+    "customFee": 100
+  },
+  {
+    "info": "CL10-USDC/DGLD 0.3%",
+    "address": "0x9E2E1D6118971698D410DB64ed20209946Dd5b2F",
+    "customFee": 3000
+  },
+  {
+    "info": "CL500-USDC/cbBTC 0.15%",
+    "address": "0xFCda5ab6BBC1fe5B8e1a185e86bb5f24b12e2278",
+    "customFee": 1500
+  },
+  {
+    "info": "CL200-THQ/USDC 0.26%",
+    "address": "0x00D43aad1B34E7bA8D037E060517F7b5318c0B83",
+    "customFee": 2600
+  },
+  {
+    "info": "CL10-cbETH/cbBTC 0.03%",
+    "address": "0x8BB9eAF3C5A906D20c4CC10eA2F73A3Ac2D5d41A",
+    "customFee": 300
+  },
+  {
+    "info": "CL200-SUMR/USDC 2%",
+    "address": "0x8fEbF59b6725c4729466b0279cb28080Ac5d1161",
+    "customFee": 20000
+  },
+  {
+    "info": "CL50-FUN/USDC 0.01%",
+    "address": "0x659bE70647B0f63217D60e077F4417b1eCC65064",
+    "customFee": 100
+  },
+  {
+    "info": "CL1-DAI/USDC 0.008%",
+    "address": "0x4A20660eC636C69AF94Cb4B251f6055f4bFf40ec",
+    "customFee": 80
+  },
+  {
+    "info": "CL200-USDC/CLAWD 0.9%",
+    "address": "0x4c76Ef610b9F6FEeB3Ca70951BeF09ED31e7f6d0",
+    "customFee": 9000
+  },
+  {
+    "info": "CL500-CHECK/SAND 0.25%",
+    "address": "0x3f985184335BD9e0A4774C79668Ce57EE2AaCFe2",
+    "customFee": 2500
+  },
+  {
+    "info": "CL100-UP/cbBTC 1%",
+    "address": "0x1E726F3177a933cc134Fd0ea7C326EAb270E0137",
+    "customFee": 10000
+  },
+  {
+    "info": "CL200-USDC/RNBW 0.25%",
+    "address": "0x4bf85cA48a620BAf9DDE3b6A7A6d88b219827caA",
+    "customFee": 2500
+  },
+  {
+    "info": "CL100-UP/USDC 1%",
+    "address": "0xb1857B20d91c216f51656B63081f35C7cD0A489d",
+    "customFee": 10000
+  },
+  {
+    "info": "CL200-KellyClaude/USDC 0.6%",
+    "address": "0xCBBA009BDe5731E68C97707e6B6edBfAb9926CF9",
+    "customFee": 6000
+  },
+  {
+    "info": "CL200-USDC/FELIX 0.6%",
+    "address": "0x1F9bA3e5Ebcd2f4CA3cDEffa5eCdF1c03cf1865d",
+    "customFee": 6000
+  },
+  {
+    "info": "CL100-WETH/KellyClaude 0.6%",
+    "address": "0x504E9a9d5b892bC03Dd9521BE00cbD148781B9d5",
+    "customFee": 6000
+  },
+  {
+    "info": "CL100-WETH/FELIX 0.6%",
+    "address": "0x0C2cdb8D97B3225c115eB5aE9cca80672D2e87fE",
+    "customFee": 6000
+  },
+  {
+    "info": "CL200-MEZO/MUSD 1%",
+    "address": "0xfCd3F5cA230E7c1Bd5b415eb85d5186346De0fec",
+    "customFee": 10000
+  },
+  {
+    "info": "CL10-USDC/ICNT 0.045%",
+    "address": "0x6F79E046101eaF00c399f0489b581E932f558d5f",
+    "customFee": 450
+  }
+]

@@ -1,0 +1,61 @@
+NotifyRewardAmountIntegrationConcreteTest
+├── When the caller is not voter
+│   └── It should revert with NotVoter
+└── When the caller is voter
+    ├── When tail emissions have started
+    │   ├── When the amount is greater than defined percentage of tail emissions
+    │   │   ├── When the current timestamp is greater than or equal to periodFinish
+    │   │   │   ├── It should return excess emissions to redistributor
+    │   │   │   ├── It should update the reward rate
+    │   │   │   ├── It should cache the updated reward rate for this epoch
+    │   │   │   ├── It should update the rewards deposited for this epoch
+    │   │   │   ├── It should update the period finish timestamp
+    │   │   │   └── It should emit a {NotifyReward} event
+    │   │   └── When the current timestamp is less than periodFinish
+    │   │       ├── It should return excess emissions to redistributor
+    │   │       ├── It should update the reward rate, including any existing rewards
+    │   │       ├── It should cache the updated reward rate for this epoch
+    │   │       ├── It should update the rewards deposited for this epoch
+    │   │       ├── It should update the period finish timestamp
+    │   │       └── It should emit a {NotifyReward} event
+    │   └── When the amount is smaller than or equal to defined percentage of tail emissions
+    │       ├── When the current timestamp is greater than or equal to periodFinish_
+    │       │   ├── It should update the reward rate
+    │       │   ├── It should cache the updated reward rate for this epoch
+    │       │   ├── It should update the rewards deposited for this epoch
+    │       │   ├── It should update the period finish timestamp
+    │       │   └── It should emit a {NotifyReward} event
+    │       └── When the current timestamp is less than periodFinish_
+    │           ├── It should update the reward rate, including any existing rewards
+    │           ├── It should cache the updated reward rate for this epoch
+    │           ├── It should update the rewards deposited for this epoch
+    │           ├── It should update the period finish timestamp
+    │           └── It should emit a {NotifyReward} event
+    └── When tail emissions have not started
+        ├── When the amount is greater than defined percentage of weekly emissions
+        │   ├── When the current timestamp is greater than or equal to periodFinish__
+        │   │   ├── It should return excess emissions to redistributor
+        │   │   ├── It should update the reward rate
+        │   │   ├── It should update the rewards deposited for this epoch
+        │   │   ├── It should cache the updated reward rate for this epoch
+        │   │   ├── It should update the period finish timestamp
+        │   │   └── It should emit a {NotifyReward} event
+        │   └── When the current timestamp is less than periodFinish__
+        │       ├── It should return excess emissions to redistributor
+        │       ├── It should update the reward rate, including any existing rewards
+        │       ├── It should cache the updated reward rate for this epoch
+        │       ├── It should update the rewards deposited for this epoch
+        │       ├── It should update the period finish timestamp
+        │       └── It should emit a {NotifyReward} event
+        └── When the amount is smaller than or equal to defined percentage of weekly emissions
+            ├── When the current timestamp is greater than or equal to periodFinish___
+            │   ├── It should update the reward rate
+            │   ├── It should update the rewards deposited for this epoch
+            │   ├── It should update the period finish timestamp
+            │   └── It should emit a {NotifyReward} event
+            └── When the current timestamp is less than periodFinish___
+                ├── It should update the reward rate, including any existing rewards
+                ├── It should cache the updated reward rate for this epoch
+                ├── It should update the rewards deposited for this epoch
+                ├── It should update the period finish timestamp
+                └── It should emit a {NotifyReward} event

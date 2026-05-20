@@ -1,0 +1,202 @@
+// SPDX-License-Identifier: BUSL-1.1
+pragma solidity 0.7.6;
+
+import "forge-std/StdJson.sol";
+import "forge-std/Script.sol";
+
+import {CLPool} from "contracts/core/CLPool.sol";
+import {CLFactory} from "contracts/core/CLFactory.sol";
+import {NonfungibleTokenPositionDescriptor} from "contracts/periphery/NonfungibleTokenPositionDescriptor.sol";
+import {NonfungiblePositionManager} from "contracts/periphery/NonfungiblePositionManager.sol";
+import {CLGauge} from "contracts/gauge/CLGauge.sol";
+import {CLGaugeFactory} from "contracts/gauge/CLGaugeFactory.sol";
+import {Redistributor} from "contracts/gauge/Redistributor.sol";
+import {DynamicSwapFeeModule} from "contracts/core/fees/DynamicSwapFeeModule.sol";
+import {CustomUnstakedFeeModule} from "contracts/core/fees/CustomUnstakedFeeModule.sol";
+import {MixedRouteQuoterV1} from "contracts/periphery/lens/MixedRouteQuoterV1.sol";
+import {MixedRouteQuoterV2} from "contracts/periphery/lens/MixedRouteQuoterV2.sol";
+import {MixedRouteQuoterV3} from "contracts/periphery/lens/MixedRouteQuoterV3.sol";
+import {QuoterV2} from "contracts/periphery/lens/QuoterV2.sol";
+import {SwapRouter} from "contracts/periphery/SwapRouter.sol";
+
+contract DeployCL is Script {
+    using stdJson for string;
+
+    uint256 public deployPrivateKey = vm.envUint("PRIVATE_KEY_DEPLOY");
+    address public deployerAddress = vm.rememberKey(deployPrivateKey);
+    string public constantsFilename = vm.envString("CONSTANTS_FILENAME");
+    string public outputFilename = vm.envString("OUTPUT_FILENAME");
+    string public jsonConstants;
+
+    // loaded variables
+    address public team;
+    address public weth;
+    address public voter;
+    address public factoryRegistry;
+    address public poolFactoryOwner;
+    address public feeManager;
+    address public notifyAdmin;
+    address public emissionAdmin;
+    address public redistributorOwner;
+    address public factoryV2;
+    address public legacyCLFactory;
+    address public legacyCLFactory2;
+    address public legacyCLGaugeFactory;
+    address public legacyCLGaugeFactory2;
+    address public upkeepManager;
+    address public gaugeStakeManager;
+    uint256 public minStakeTime;
+    uint256 public penaltyRate;
+    string public nftName;
+    string public nftSymbol;
+
+    // deployed contracts
+    CLPool public poolImplementation;
+    CLFactory public poolFactory;
+    NonfungibleTokenPositionDescriptor public nftDescriptor;
+    NonfungiblePositionManager public nft;
+    CLGauge public gaugeImplementation;
+    CLGaugeFactory public gaugeFactory;
+    Redistributor public redistributor;
+    DynamicSwapFeeModule public swapFeeModule;
+    CustomUnstakedFeeModule public unstakedFeeModule;
+    MixedRouteQuoterV1 public mixedQuoter;
+    MixedRouteQuoterV2 public mixedQuoterV2;
+    MixedRouteQuoterV3 public mixedQuoterV3;
+    QuoterV2 public quoter;
+    SwapRouter public swapRouter;
+
+    function run() public {
+        string memory root = vm.projectRoot();
+        string memory basePath = concat(root, "/script/constants/");
+        string memory path = concat(basePath, constantsFilename);
+        jsonConstants = vm.readFile(path);
+
+        team = abi.decode(vm.parseJson(jsonConstants, ".team"), (address));
+        weth = abi.decode(vm.parseJson(jsonConstants, ".WETH"), (address));
+        voter = abi.decode(vm.parseJson(jsonConstants, ".Voter"), (address));
+        factoryRegistry = abi.decode(vm.parseJson(jsonConstants, ".FactoryRegistry"), (address));
+        poolFactoryOwner = abi.decode(vm.parseJson(jsonConstants, ".poolFactoryOwner"), (address));
+        feeManager = abi.decode(vm.parseJson(jsonConstants, ".feeManager"), (address));
+        notifyAdmin = abi.decode(vm.parseJson(jsonConstants, ".notifyAdmin"), (address));
+        emissionAdmin = abi.decode(vm.parseJson(jsonConstants, ".emissionAdmin"), (address));
+        redistributorOwner = abi.decode(vm.parseJson(jsonConstants, ".redistributorOwner"), (address));
+        factoryV2 = abi.decode(vm.parseJson(jsonConstants, ".factoryV2"), (address));
+        legacyCLFactory = abi.decode(vm.parseJson(jsonConstants, ".legacyCLFactory"), (address));
+        legacyCLFactory2 = abi.decode(vm.parseJson(jsonConstants, ".legacyCLFactory2"), (address));
+        legacyCLGaugeFactory = abi.decode(vm.parseJson(jsonConstants, ".legacyCLGaugeFactory"), (address));
+        legacyCLGaugeFactory2 = abi.decode(vm.parseJson(jsonConstants, ".legacyCLGaugeFactory2"), (address));
+        upkeepManager = abi.decode(vm.parseJson(jsonConstants, ".upkeepManager"), (address));
+        gaugeStakeManager = abi.decode(vm.parseJson(jsonConstants, ".gaugeStakeManager"), (address));
+        minStakeTime = abi.decode(vm.parseJson(jsonConstants, ".minStakeTime"), (uint256));
+        penaltyRate = abi.decode(vm.parseJson(jsonConstants, ".penaltyRate"), (uint256));
+        nftName = abi.decode(vm.parseJson(jsonConstants, ".nftName"), (string));
+        nftSymbol = abi.decode(vm.parseJson(jsonConstants, ".nftSymbol"), (string));
+
+        require(address(voter) != address(0)); // sanity check for constants file fillled out correctly
+
+        vm.startBroadcast(deployerAddress);
+        // deploy pool + factory
+        poolImplementation = new CLPool();
+        poolFactory = new CLFactory({
+            _voter: voter,
+            _clFactory: legacyCLFactory,
+            _poolImplementation: address(poolImplementation)
+        });
+
+        // deploy gauges
+        gaugeImplementation = new CLGauge();
+        gaugeFactory = new CLGaugeFactory({
+            _voter: address(voter),
+            _implementation: address(gaugeImplementation),
+            _emissionAdmin: emissionAdmin,
+            _defaultCap: 100,
+            _legacyCLGaugeFactory: legacyCLGaugeFactory
+        });
+
+        // deploy redistributor
+        redistributor = new Redistributor({
+            _voter: address(voter),
+            _gaugeFactory: address(gaugeFactory),
+            _legacyGaugeFactory: legacyCLGaugeFactory2,
+            _upkeepManager: upkeepManager,
+            _initialOwner: redistributorOwner
+        });
+
+        // deploy nft contracts
+        nftDescriptor =
+            new NonfungibleTokenPositionDescriptor({_WETH9: address(weth), _nativeCurrencyLabelBytes: bytes32("ETH")});
+        nft = new NonfungiblePositionManager({
+            _factory: address(poolFactory),
+            _WETH9: address(weth),
+            _tokenDescriptor: address(nftDescriptor),
+            name: nftName,
+            symbol: nftSymbol
+        });
+
+        // set nft manager in the factories
+        gaugeFactory.setNonfungiblePositionManager(address(nft));
+        gaugeFactory.setNotifyAdmin(notifyAdmin);
+        gaugeFactory.setDefaultMinStakeTime(minStakeTime);
+        gaugeFactory.setPenaltyRate(penaltyRate);
+        gaugeFactory.setGaugeStakeManager(gaugeStakeManager);
+
+        // deploy fee modules
+        swapFeeModule = new DynamicSwapFeeModule({
+            _factory: address(poolFactory),
+            _defaultScalingFactor: 0,
+            _defaultFeeCap: 30_000,
+            _pools: new address[](0),
+            _fees: new uint24[](0)
+        });
+        unstakedFeeModule = new CustomUnstakedFeeModule({_factory: address(poolFactory)});
+        poolFactory.setSwapFeeModule({_swapFeeModule: address(swapFeeModule)});
+        poolFactory.setUnstakedFeeModule({_unstakedFeeModule: address(unstakedFeeModule)});
+
+        // transfer permissions
+        nft.setOwner(team);
+        poolFactory.setOwner(poolFactoryOwner);
+        poolFactory.setSwapFeeManager(feeManager);
+        poolFactory.setUnstakedFeeManager(feeManager);
+
+        mixedQuoter = new MixedRouteQuoterV1({_factory: address(poolFactory), _factoryV2: factoryV2, _WETH9: weth});
+        quoter = new QuoterV2({_factory: address(poolFactory), _WETH9: weth});
+        swapRouter = new SwapRouter({_factory: address(poolFactory), _WETH9: weth});
+        mixedQuoterV2 = new MixedRouteQuoterV2({
+            _factory: address(poolFactory),
+            _legacyCLFactory: legacyCLFactory,
+            _factoryV2: factoryV2,
+            _WETH9: weth
+        });
+        mixedQuoterV3 = new MixedRouteQuoterV3({
+            _factory: address(poolFactory),
+            _legacyCLFactory: legacyCLFactory,
+            _legacyCLFactory2: legacyCLFactory2,
+            _factoryV2: factoryV2,
+            _WETH9: weth
+        });
+        vm.stopBroadcast();
+
+        // write to file
+        path = concat(basePath, "output/DeployCL-");
+        path = concat(path, outputFilename);
+        vm.writeJson(vm.serializeAddress("", "PoolImplementation", address(poolImplementation)), path);
+        vm.writeJson(vm.serializeAddress("", "PoolFactory", address(poolFactory)), path);
+        vm.writeJson(vm.serializeAddress("", "NonfungibleTokenPositionDescriptor", address(nftDescriptor)), path);
+        vm.writeJson(vm.serializeAddress("", "NonfungiblePositionManager", address(nft)), path);
+        vm.writeJson(vm.serializeAddress("", "GaugeImplementation", address(gaugeImplementation)), path);
+        vm.writeJson(vm.serializeAddress("", "GaugeFactory", address(gaugeFactory)), path);
+        vm.writeJson(vm.serializeAddress("", "DynamicSwapFeeModule", address(swapFeeModule)), path);
+        vm.writeJson(vm.serializeAddress("", "UnstakedFeeModule", address(unstakedFeeModule)), path);
+        vm.writeJson(vm.serializeAddress("", "MixedQuoter", address(mixedQuoter)), path);
+        vm.writeJson(vm.serializeAddress("", "MixedQuoterV2", address(mixedQuoterV2)), path);
+        vm.writeJson(vm.serializeAddress("", "MixedQuoterV3", address(mixedQuoterV3)), path);
+        vm.writeJson(vm.serializeAddress("", "Quoter", address(quoter)), path);
+        vm.writeJson(vm.serializeAddress("", "SwapRouter", address(swapRouter)), path);
+        vm.writeJson(vm.serializeAddress("", "Redistributor", address(redistributor)), path);
+    }
+
+    function concat(string memory a, string memory b) internal pure returns (string memory) {
+        return string(abi.encodePacked(a, b));
+    }
+}
