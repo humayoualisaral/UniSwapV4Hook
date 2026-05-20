@@ -10,7 +10,7 @@ import {Currency}        from "v4-core/src/types/Currency.sol";
 import {ModifyLiquidityParams, SwapParams} from "v4-core/src/types/PoolOperation.sol";
 import {TickMath}        from "v4-core/src/libraries/TickMath.sol";
 import {IHooks}          from "v4-core/src/interfaces/IHooks.sol";
-import {HookMiner} from "v4-hooks-public/src/utils/HookMiner.sol";
+import {HookMiner}       from "v4-hooks-public/src/utils/HookMiner.sol";
 import {MockERC20}       from "solmate/src/test/utils/mocks/MockERC20.sol";
 import {TreasuryFeeHook} from "../src/TreasuryFeeHook.sol";
 
@@ -22,7 +22,7 @@ contract TreasuryFeeHookTest is Test, Deployers {
     PoolKey         poolKey;
 
     address constant TREASURY =
-        0x966C117989EFE1d11Ba1A39d31C215fa851878E7;
+        0x3a22a82aE40e0a269D1B5B2BD322b8762E438ccB;
 
     function setUp() public {
         deployFreshManagerAndRouters();
@@ -32,8 +32,8 @@ contract TreasuryFeeHookTest is Test, Deployers {
         if (address(memecoin) > address(weth))
             (memecoin, weth) = (weth, memecoin);
 
+        // afterInitialize removed — only AFTER_SWAP flags needed
         uint160 flags = uint160(
-            Hooks.AFTER_INITIALIZE_FLAG         |
             Hooks.AFTER_SWAP_FLAG               |
             Hooks.AFTER_SWAP_RETURNS_DELTA_FLAG
         );
@@ -59,14 +59,11 @@ contract TreasuryFeeHookTest is Test, Deployers {
             TickMath.getSqrtPriceAtTick(0)
         );
 
-        // register pool memecoin on the hook (PoolManager.initialize in this
-        // copy doesn't accept hookData), so register explicitly
-        hook.registerPool(poolKey, address(memecoin));
+        // No registerPool needed — hook taxes all swaps automatically
 
         memecoin.mint(address(this), 1_000e18);
-        weth.mint(address(this), 1_000e18);
+        weth.mint(address(this),     1_000e18);
 
-        // Approve all test routers (same as Deployers.deployMintAndApproveCurrency)
         address[9] memory toApprove = [
             address(swapRouter),
             address(swapRouterNoChecks),
@@ -84,45 +81,80 @@ contract TreasuryFeeHookTest is Test, Deployers {
             weth.approve(toApprove[i], type(uint256).max);
         }
 
-        // add some liquidity so swaps produce non-zero outputs
         modifyLiquidityRouter.modifyLiquidity(
             poolKey,
-            ModifyLiquidityParams({ tickLower: -1000, tickUpper: 1000, liquidityDelta: 1e18, salt: 0 }),
+            ModifyLiquidityParams({
+                tickLower:      -1000,
+                tickUpper:       1000,
+                liquidityDelta:  1e18,
+                salt:            0
+            }),
             ""
         );
-
-        // debug: print pool manager balances for both tokens
-        console.log("manager memecoin balance:", memecoin.balanceOf(address(manager)));
-        console.log("manager weth balance:    ", weth.balanceOf(address(manager)));
     }
+
+    // ─── Sell: memecoin → WETH ────────────────────────────────────────────────
 
     function test_SellFeeGoesToTreasury() public {
-        uint256 before = weth.balanceOf(TREASURY);
-        bool zeroForOne = address(memecoin) == Currency.unwrap(poolKey.currency0);
+        uint256 before     = weth.balanceOf(TREASURY);
+        bool    zeroForOne = address(memecoin) == Currency.unwrap(poolKey.currency0);
 
-        // debug: snapshot balances immediately before swap
-        console.log("[before swap] manager memecoin:", memecoin.balanceOf(address(manager)));
-        console.log("[before swap] manager weth:    ", weth.balanceOf(address(manager)));
+        swap(poolKey, zeroForOne, -int256(1e18), "");
 
-        swap(poolKey, zeroForOne, -int256(100e18), "");
-
-        assertGt(weth.balanceOf(TREASURY) - before, 0, "Treasury got nothing");
-        console.log("Treasury received:", weth.balanceOf(TREASURY) - before);
+        uint256 received = weth.balanceOf(TREASURY) - before;
+        assertGt(received, 0, "treasury got nothing on sell");
+        console.log("treasury received (sell):", received);
     }
 
-    function test_BuyHasNoFee() public {
-        uint256 before = memecoin.balanceOf(TREASURY);
-        bool zeroForOne = address(weth) == Currency.unwrap(poolKey.currency0);
+    // ─── Buy: WETH → memecoin ─────────────────────────────────────────────────
+    // Hook now taxes ALL swaps — buys also send fee to treasury
 
-    weth.mint(address(this), 100e18);
-    // Approve the swap router so it can pull WETH for the buy
-    weth.approve(address(swapRouter), type(uint256).max);
+    function test_BuyFeeGoesToTreasury() public {
+        uint256 before     = memecoin.balanceOf(TREASURY);
+        bool    zeroForOne = address(weth) == Currency.unwrap(poolKey.currency0);
 
-        swap(poolKey, zeroForOne, -int256(100e18), "");
+        weth.mint(address(this), 100e18);
+        weth.approve(address(swapRouter), type(uint256).max);
 
-        assertEq(memecoin.balanceOf(TREASURY) - before, 0, "Buy should have no fee");
+        swap(poolKey, zeroForOne, -int256(1e18), "");
+
+        uint256 received = memecoin.balanceOf(TREASURY) - before;
+        assertGt(received, 0, "treasury got nothing on buy");
+        console.log("treasury received (buy):", received);
     }
 
-    function test_TreasuryAddress()  public view { assertEq(hook.TREASURY(), TREASURY); }
-    function test_FeeBps()           public view { assertEq(hook.FEE_BPS(), 9_900);     }
+    // ─── Fee split is ~99% ────────────────────────────────────────────────────
+
+    function test_FeeIs99Percent() public {
+        uint256 userBefore     = weth.balanceOf(address(this));
+        uint256 treasuryBefore = weth.balanceOf(TREASURY);
+        bool    zeroForOne     = address(memecoin) == Currency.unwrap(poolKey.currency0);
+
+        swap(poolKey, zeroForOne, -int256(1e18), "");
+
+        uint256 userReceived     = weth.balanceOf(address(this)) - userBefore;
+        uint256 treasuryReceived = weth.balanceOf(TREASURY)      - treasuryBefore;
+        uint256 totalOutput      = userReceived + treasuryReceived;
+
+        assertApproxEqRel(
+            treasuryReceived,
+            totalOutput * 9_900 / 10_000,
+            0.01e18,
+            "treasury fee should be ~99%"
+        );
+
+        console.log("user received:     ", userReceived);
+        console.log("treasury received: ", treasuryReceived);
+        console.log("total output:      ", totalOutput);
+    }
+
+    // ─── Constants ────────────────────────────────────────────────────────────
+
+    function test_TreasuryAddress() public view {
+        assertEq(hook.TREASURY(), TREASURY);
+    }
+
+    function test_FeeBps() public view {
+        assertEq(hook.FEE_BPS(), 9_900);
+    }
 }
